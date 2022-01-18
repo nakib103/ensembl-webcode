@@ -73,6 +73,24 @@ sub precache {
         shortlabels => '',
       }
     },
+    MANE_Select => {
+      loop => ['species','genome'],
+      args => {
+        db => "core",
+        logic_names => [qw(
+          assembly_patch_ensembl    ensembl      ensembl_havana_gene
+          ensembl_havana_ig_gene    ensembl_havana_lincrna
+          ensembl_lincrna           havana       havana_ig_gene
+          mt_genbank_import         ncrna        proj_ensembl
+          proj_ensembl_havana_gene  proj_ensembl_havana_ig_gene
+          proj_ensembl_havana_lincrna   proj_havana
+          proj_havana_ig_gene       proj_ncrna    ensembl_havana_transcript
+        )],
+        label_key => "[biotype]",
+        only_attrib => "MANE_Select",
+        shortlabels => '',
+      }
+    },
     genscan => {
       loop => ['species','genome'],
       args => {
@@ -195,13 +213,28 @@ sub _get_prediction_transcripts {
 
 sub _get_genes {
   my ($self,$args) = @_;
-  
+  # warn "------ _get_genes";
+  # use Data::Dumper;
+
+
+  # warn "------ logic_names";
+  # warn Dumper($args->{'logic_names'});
+
+  warn "------ db";
+  warn Dumper($args->{'db'});
+
+  # warn "------ species";
+  # warn Dumper($args->{'species'});
+
+  # warn "------ only_attrib";
+  # warn Dumper($args->{'only_attrib'});
+
   my $slice          = $args->{'slice'};
   my $analyses       = $args->{'logic_names'};
   my $db_alias       = $args->{'db'};
   my $species        = $args->{'species'};
   my $only_attrib    = $args->{'only_attrib'} || '' ;
-  my $is_gencode_basic = $only_attrib eq 'gencode_basic' ? 1 : 0;
+  my $is_gencode_basic = $only_attrib eq 'gencode_basic' ? 1 : 1;
 
   if ($analyses->[0] eq 'LRG_import' && !$slice->isa('Bio::EnsEMBL::LRGSlice')) {
     warn "!!! DEPRECATED CODE - please change this track to use GlyphSet::lrg";
@@ -352,10 +385,15 @@ sub _get_transcripts {
   my @tff;
   my @trans = sort { $b->start <=> $a->start } @{$g->get_all_Transcripts};
   @trans = reverse @trans if $g->strand; 
+  warn "------";
   foreach my $t (@trans) {
+    warn "------";
     if($args->{'only_attrib'}) {
       next unless @{$t->get_all_Attributes($args->{'only_attrib'})};
     }
+
+    warn "------" . $args->{'only_attrib'};
+
     my $tf = {
       _unique => $self->_unique($args,$t),
       start => $t->start,
@@ -391,11 +429,20 @@ sub _is_coding_gene {
 sub get {
   my ($self,$args) = @_;
   my (@out,$genes);
+  warn "------ get";
   if($args->{'prediction'}) {
     $genes = $self->_get_prediction_transcripts($args);
   } else {
     $genes = $self->_get_genes($args);
   }
+
+  use Data::Dumper;
+  warn "-------- GENES:";
+  warn Dumper($genes);
+
+  use Carp qw(cluck);
+  cluck('No Genes');
+
   foreach my $g (@$genes) {
     my $title = sprintf("Gene: %s; Location: %s:%s-%s",
                         $g->stable_id,$g->seq_region_name,

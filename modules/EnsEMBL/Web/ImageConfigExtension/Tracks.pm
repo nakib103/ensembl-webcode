@@ -449,7 +449,6 @@ sub add_genes {
 
       my $menu = $self->get_node($t);
       next unless $menu;
-
       $self->_add_track($menu, $key, "${t}_${key}_$key2", $data->{$key2}, {
         glyphset  => ($t =~ /_/ ? '' : '_') . $type, # QUICK HACK
         colours   => $colours,
@@ -462,7 +461,7 @@ sub add_genes {
         ] : [
          'off',          'Off',
          'gene_nolabel', 'No labels',
-         'gene_label',   'With labels'
+
         ]
       });
       $flag = 1;
@@ -491,6 +490,25 @@ sub add_genes {
       ],
     });
   }
+
+  # Adding MANE tracks
+
+  $self->add_track('transcript', 'core', "MANE Select", '_mane_select', {
+    labelcaption  => "MANE Select",
+    display       => 'off',
+    db            => "core",
+    description   => 'MANE SELECT DECRIPTION',
+    sortable      => 1,
+    colours       => $self->species_defs->colour('gene'),
+    label_key     => '[biotype]',
+    logic_names   => ['proj_ensembl',  'proj_ncrna', 'proj_havana_ig_gene', 'havana_ig_gene', 'ensembl_havana_ig_gene', 'proj_ensembl_havana_lincrna', 'proj_havana', 'ensembl', 'mt_genbank_import', 'ensembl_havana_lincrna', 'proj_ensembl_havana_ig_gene', 'ncrna', 'assembly_patch_ensembl', 'ensembl_havana_gene', 'ensembl_lincrna', 'proj_ensembl_havana_gene', 'havana', 'ensembl_havana_transcript'],
+    renderers     =>  [
+      'off',                     'Off',
+      'transcript_nolabel',      'Expanded without labels',
+      'transcript_label',        'Expanded with labels'
+    ],
+  });
+
 
 
   # Need to add the gene menu track here

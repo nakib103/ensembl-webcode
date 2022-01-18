@@ -29,6 +29,8 @@ use List::MoreUtils qw(natatime);
 
 use base qw(EnsEMBL::Draw::GlyphSet_transcript_new_base);
 
+use Data::Dumper;
+  
 #####################################################
 # GLYPHSET API                                      #
 #####################################################

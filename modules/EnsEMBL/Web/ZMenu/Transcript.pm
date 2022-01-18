@@ -140,13 +140,35 @@ sub content {
       label => $transcript->version ? $stable_id . "." . $transcript->version : $stable_id,
       link  => $hub->url({ type => 'Transcript', action => 'Summary' })
     });
- } else {
+  } else {
     $self->add_entry({
       type  => 'Transcript',
       label => $transcript->version ? $stable_id . "." . $transcript->version : $stable_id,
       link  => $hub->url({ type => 'Transcript', action => 'Summary' })
     });
- }
+  }
+
+  if($transcript->is_mane){
+
+    my $mane_select = $transcript->get_all_Attributes('MANE_Select')->[0];
+    my $mane_plus_clinical = $transcript->get_all_Attributes('MANE_Plus_Clinical')->[0];
+
+    if($mane_select){
+      $self->add_entry({
+        type  => $mane_select->name,
+        label => $mane_select->value,
+        link => $hub->get_ExtURL('REFSEQ_DNA', {'ID' => $mane_select->value})
+      });
+    }
+      
+    if($mane_plus_clinical){
+      $self->add_entry({
+        type  => $mane_plus_clinical->name,
+        label => $mane_plus_clinical->value,
+        link => $hub->get_ExtURL('REFSEQ_DNA', {'ID' => $mane_plus_clinical->value})
+      });
+    }
+  }
 
   $self->add_entry({
     type  => ' ',
