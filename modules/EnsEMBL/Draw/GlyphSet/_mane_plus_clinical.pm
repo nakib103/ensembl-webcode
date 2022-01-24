@@ -17,9 +17,9 @@ limitations under the License.
 
 =cut
 
-package EnsEMBL::Draw::GlyphSet::_mane_select;
+package EnsEMBL::Draw::GlyphSet::_mane_plus_clinical;
 
-### Module for drawing the MANE Select track inheriting from _transcript.pm.
+### Module for drawing the MANE Clinical Plus track inheriting from _transcript.pm.
 
 use strict;
 use Carp qw(cluck);
@@ -30,6 +30,6 @@ use base qw(EnsEMBL::Draw::GlyphSet::_transcript);
 sub max_label_rows { return $_[0]->my_config('max_label_rows') || 2; }
 
 sub only_attrib { 
-    return 'MANE_Select'; }
+    return 'MANE_Plus_Clinical'; }
 
 1;

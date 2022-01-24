@@ -41,7 +41,7 @@ sub new {
 
 sub get {
   my ($self,$query) = @_;
-  warn "----- query: $query";
+
   return EnsEMBL::Web::Query->_new($self,"EnsEMBL::Web::Query::$query");
 }
 
