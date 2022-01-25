@@ -19,7 +19,7 @@ limitations under the License.
 
 package EnsEMBL::Draw::GlyphSet::_mane_plus_clinical;
 
-### Module for drawing the MANE Clinical Plus track inheriting from _transcript.pm.
+### Module for drawing the MANE Plus Clinical track inheriting from _transcript.pm.
 
 use strict;
 use Carp qw(cluck);
