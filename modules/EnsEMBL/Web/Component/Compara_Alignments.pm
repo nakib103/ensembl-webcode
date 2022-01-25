@@ -281,6 +281,7 @@ sub _get_sequence {
   $config->{'slices'} = $slices;
 
   my $view = $self->view;
+  my $lookup = $self->hub->species_defs->prodnames_to_urls_lookup;
 
   my ($sequence, $markup) = $self->get_sequence_data($config->{'slices'}, $config);
 
@@ -288,7 +289,7 @@ sub _get_sequence {
 
   foreach my $slice (@{$config->{'slices'}}) {
     my $seq = shift @s2;
-    $seq->name($slice->{'display_name'} || $slice->{'name'});
+    $seq->name($lookup->{$slice->{'display_name'}} || $lookup->{$slice->{'name'}});
   }
 
   $view->markup($sequence,$markup,$config);
@@ -449,9 +450,10 @@ sub get_slice_table {
   
   my $table_rows = '';
   $_ = 0 for my ($species_padding, $region_padding, $number_padding, $ancestral_sequences);
+  my $lookup = $hub->species_defs->prodnames_to_urls_lookup;
 
   foreach (@$slices) {
-    my $species = $_->{'display_name'} || $_->{'name'};
+    my $species = $lookup->{$_->{'display_name'}} || $lookup->{$_->{'name'}};
     
     next unless $species;
     
@@ -461,7 +463,7 @@ sub get_slice_table {
       action  => 'View'
     );
 
-    $url_params{'__clear'} = 1 unless $_->{'name'} eq $primary_species;
+    $url_params{'__clear'} = 1 unless $lookup->{$_->{'name'}} eq $primary_species;
 
     $species_padding = length $species if $return_padding && length $species > $species_padding;
 
@@ -513,6 +515,7 @@ sub _get_target_slice_table {
   my $html                    = '';
 
   my $other_species;
+  my $lookup = $hub->species_defs->prodnames_to_urls_lookup;
 
   #Find the mapping reference species for EPO_LOW_COVERAGE alignments to distinguish the overlapping blocks
   if ($type =~ /EPO_LOW_COVERAGE/ && $is_low_coverage_species) {
@@ -528,11 +531,10 @@ sub _get_target_slice_table {
   } elsif ($class =~ /pairwise/) {
     #Find the non-reference species for pairwise alignments
     #get the non_ref name from the first block
-    $other_species = $gabs->[0]->get_all_non_reference_genomic_aligns->[0]->genome_db->name;
+    $other_species = $hub->species_defs->prodname_to_url($gabs->[0]->get_all_non_reference_genomic_aligns->[0]->genome_db->name);
   }
 
   my $merged_blocks = $self->object->build_features_into_sorted_groups($groups);
-  my $lookup        = $hub->species_defs->production_name_lookup;
 
   #Create table columns
   my @columns = (

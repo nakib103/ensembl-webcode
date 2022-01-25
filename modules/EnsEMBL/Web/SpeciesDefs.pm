@@ -488,9 +488,10 @@ sub _load_in_species_pages {
   return $spp_tree;
 }
 
-sub _load_in_taxonomy_division {
-  my ($self) = @_;
-  my $filename = $SiteDefs::ENSEMBL_TAXONOMY_DIVISION_FILE;
+sub _load_json_config {
+  my ($self, $filename) = @_;
+  return unless $filename;
+
   my $json_text = do {
     open(my $json_fh, "<", $filename)
       or die("Can't open $filename: $!\n");
@@ -656,6 +657,7 @@ sub _expand_database_templates {
   ## Autoconfigure databases
   unless (exists $tree->{'databases'} && exists $tree->{'databases'}{'DATABASE_CORE'}) {
     my @db_types = qw(CORE CDNA OTHERFEATURES RNASEQ FUNCGEN VARIATION);
+    push @db_types, 'COMPARA' if $SiteDefs::SINGLE_SPECIES_COMPARA;
     my $db_details = {
                       'HOST'    => $HOST,
                       'PORT'    => $PORT,
@@ -671,7 +673,8 @@ sub _expand_database_templates {
         my $non_vert_version = $SiteDefs::SITE_RELEASE_VERSION;
         $db_name = sprintf('%s_%s', $filename, lc($_));
         $db_name .= '_'.$non_vert_version if $non_vert_version;                                 
-        $db_name .= sprintf('_%s_%s', $SiteDefs::ENSEMBL_VERSION, $species_version);
+        $db_name .= $_ eq 'COMPARA' ? sprintf('_%s', $SiteDefs::ENSEMBL_VERSION)
+                                    : sprintf('_%s_%s', $SiteDefs::ENSEMBL_VERSION, $species_version);
       }
       ## Does this database exist?
       $db_details->{'NAME'} = $db_name;
@@ -683,7 +686,7 @@ sub _expand_database_templates {
       else {
         ## Ignore this step for MULTI, as it may not have a core db
         unless ($filename eq 'MULTI') {
-          my $db_string = $db_name.'@'.$db_details->{'HOST'};
+          my $db_string = sprintf '%s@%s:%s', $db_name, $db_details->{'HOST'}, $db_details->{'PORT'};
           print STDERR "\t  [WARN] CORE DATABASE NOT FOUND - looking for '$db_string'\n" if $_ eq 'CORE';
           $self->_info_line('Databases', "-- database $db_name not available") if $SiteDefs::ENSEMBL_WARN_DATABASES;
         }
@@ -829,7 +832,7 @@ sub _parse {
   $self->_info_line('Filesystem', 'Trawled web tree');
   # Load taxonomy division json for species selector
   $self->_info_log('Loading', 'Loading taxonomy division json file');
-  $tree->{'ENSEMBL_TAXONOMY_DIVISION'} = $self->_load_in_taxonomy_division;
+  $tree->{'ENSEMBL_TAXONOMY_DIVISION'} = $self->_load_json_config($SiteDefs::ENSEMBL_TAXONOMY_DIVISION_FILE);
   
   # Load species lists, if not present in SiteDefs
   unless (scalar @{$SiteDefs::PRODUCTION_NAMES||[]}) {
@@ -866,19 +869,24 @@ sub _parse {
   my $species_to_strains = {};
   my $species_to_assembly = {};
 
+  ## Get favourites from file (rapid release only atm)
+  my $favourites = $self->_read_species_list_file('FAVOURITES')||[]; 
+  ## Also override primary & secondary species
+  if (scalar @$favourites) {
+    $SiteDefs::ENSEMBL_PRIMARY_SPECIES = $favourites->[0];
+    $SiteDefs::ENSEMBL_SECONDARY_SPECIES = $favourites->[1];
+  }
+
   # Loop over each tree and make further manipulations
   foreach my $species (@$SiteDefs::PRODUCTION_NAMES, 'MULTI') {
     $config_packer->species($species);
     $config_packer->munge('config_tree');
     $self->_info_line('munging', "$species config");
 
-    ## Configure favourites if not in DEFAULTS.ini (rapid release)
+    ## Configure favourites if not in DEFAULTS.ini 
     unless ($config_packer->tree->{'DEFAULT_FAVOURITES'}) {
-      my $favourites = $self->_read_species_list_file('FAVOURITES'); 
-      warn "!!! NO FAVOURITES CONFIGURED" unless scalar @{$favourites||[]};
+      warn "!!! NO FAVOURITES CONFIGURED" unless scalar @$favourites;
       $config_packer->tree->{'DEFAULT_FAVOURITES'} = $favourites;
-      $config_packer->tree->{'ENSEMBL_PRIMARY_SPECIES'} = $favourites->[0];
-      $config_packer->tree->{'ENSEMBL_SECONDARY_SPECIES'} = $favourites->[1];
     }
 
     # Replace any placeholder text in sample data
@@ -914,7 +922,7 @@ sub _parse {
   ## Final munging
   my $datasets = [];
   my $aliases  = $tree->{'MULTI'}{'ENSEMBL_SPECIES_URL_MAP'};
-  my $labels    = $tree->{'MULTI'}{'TAXON_LABEL'};  
+  my $labels   = $tree->{'MULTI'}{'TAXON_LABEL'};  
 
   ## Loop through all keys, not just PRODUCTION_NAMES (need for collection dbs)
   foreach my $key (sort keys %$tree) {
@@ -927,6 +935,19 @@ sub _parse {
       ## Add in aliases to production names
       $aliases->{$prodname} = $url;
     
+      ## Set RELATED TAXON to clusterset ID, so we don't need to hardcode it
+      my $clustersets = $config_packer->tree->{'DATABASE_COMPARA'}{'CLUSTERSETS'}; 
+      my $cid = $clustersets->{$prodname};
+      if ($cid && $cid ne 'default') {
+        $tree->{$prodname}{'RELATED_TAXON'} = $cid;
+        ## Also set RELATED TAXON for parent spp, as the clusterset is 'default' and
+        ## getting a meaningful value is really hard to do via SQL
+        my $parent_prodname = $tree->{$prodname}{'STRAIN_GROUP'};
+        if ($parent_prodname) {
+          $tree->{$parent_prodname}{'RELATED_TAXON'} = $cid; 
+        }
+      }
+
       ## Rename the tree keys for easy data access via URLs
       ## (and backwards compatibility!)
       if ($url ne $prodname) {
@@ -953,11 +974,10 @@ sub _parse {
   }
 
   ## Continue with munging
-  foreach my $sp (@$datasets) {
-    my $url = $tree->{$sp}{'SPECIES_URL'};
+  my $image_dir = $SiteDefs::SPECIES_IMAGE_DIR;
+  foreach my $url (@$datasets) {
 
     ## Assign an image to this species
-    my $image_dir = $SiteDefs::SPECIES_IMAGE_DIR;
     my $no_image  = 1;
     if ($image_dir) {
       ## This site has individual species images for all/most species
@@ -1034,8 +1054,9 @@ sub _parse {
   $tree->{'MULTI'}{'ENSEMBL_DATASETS'} = $datasets;
   #warn ">>> NEW KEYS: ".Dumper($tree);
 
-  ## New species list - currently only used by rapid release
+  ## Species lists - currently only used by rapid release
   $tree->{'MULTI'}{'NEW_SPECIES'} = $self->_read_species_list_file('NEW_SPECIES');
+  $tree->{'MULTI'}{'REFERENCE_LOOKUP'} = $self->_load_json_config($SiteDefs::REFERENCE_LOOKUP_FILE);
 
   ## File format info
   my $format_info = $self->_get_file_format_info($tree);;
@@ -1291,7 +1312,18 @@ sub multi {
 
 sub compara_like_databases {
   my $self = shift;
-  return $self->multi_val('compara_like_databases');
+  if ($self->SINGLE_SPECIES_COMPARA) {
+    my $species = shift;
+    if ($species) {
+      return $self->get_config($species, 'compara_like_databases');
+    }
+    else {
+      return $self->multi_val('compara_like_databases');
+    }
+  }
+  else {
+    return $self->multi_val('compara_like_databases');
+  }
 }
 
 sub multi_val {
@@ -1541,12 +1573,10 @@ sub species_label {
   ### This function will return the display name of all known (by Compara) species.
   ### Some species in genetree can be from other EG units, and some can be from external sources
   ### Arguments:
-  ###     key             String: species production name or URL
+  ###     url             String: species  URL
   ###     no_formating    Boolean: omit italics from scientific name  
-  my ($self, $key, $no_formatting) = @_;
+  my ($self, $url, $no_formatting) = @_;
 
-  # FIXME: ugly hack - better to always pass in URL so we don't have to mess with it here
-  my $url = ucfirst($key);
   my $display = $self->get_config($url, 'SPECIES_DISPLAY_NAME');
   my $label = '';
 
@@ -1575,11 +1605,11 @@ sub species_label {
       ## Pan-compara species - get label from metadata db
       my $info = $self->get_config('MULTI', 'PAN_COMPARA_LOOKUP');
       if ($info) {
-        if ($info->{$key}) {
-          $label = $info->{$key}{'display_name'}
+        if ($info->{$url}) {
+          $label = $info->{$url}{'display_name'}
         }
         else {
-          $label = $info->{lc $key}{'display_name'}
+          $label = $info->{lc $url}{'display_name'}
         }
       }
     }
@@ -1589,10 +1619,10 @@ sub species_label {
   return $label;
 }
 
-sub production_name_lookup {
-## Maps all species to their production name
+sub prodnames_to_urls_lookup {
+## Maps all species' production names to their URLs
   my $self = shift;
-  my $names = {};
+  my $names = {'ancestral_sequences' => 'Ancestral sequences'};
   
   foreach ($self->valid_species) {
     $names->{$self->get_config($_, 'SPECIES_PRODUCTION_NAME')} = $_;
@@ -1600,11 +1630,12 @@ sub production_name_lookup {
   return $names;
 }
 
-sub production_name_mapping {
+sub prodname_to_url {
+### Given a production name, work out the species URL
 ### As the name said, the function maps the production name with the species URL, 
-### @param key - species production name (or URL in the case of some compara code) 
+### @param key - species production name
 ### Return string = the corresponding species.url name which is the name web uses for URL and other code
-### Fall back to production name if not found - mostly for pan-compara
+### Falls back to production name if not found, mostly for pan-compara - the production name _should_be an alias anyway, but this method ensures we get the "correct" value where possible
   my ($self, $production_name) = @_;
   my $mapping_name = $production_name;
   

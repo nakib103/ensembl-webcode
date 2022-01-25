@@ -47,6 +47,7 @@ sub configure {
     COMPARA             => 'Bio::EnsEMBL::Compara::DBSQL::DBAdaptor',
     COMPARA_PAN_ENSEMBL => 'Bio::EnsEMBL::Compara::DBSQL::DBAdaptor',
     USERDATA            => 'Bio::EnsEMBL::DBSQL::DBAdaptor',
+    METADATA            => 'Bio::EnsEMBL::MetaData::DBSQL::MetaDataDBAdaptor',
     COMPARA_MULTIPLE    => undef,
     WEBSITE             => undef,
     GENE_AUTOCOMPLETE   => undef,
@@ -63,13 +64,14 @@ sub configure {
     $sp = 'ancestral_sequences' if $sp eq 'MULTI';
     
     next unless ref $self->{'conf'}->{'_storage'}{$species};
+    ## Owing to code changes elsewhere, some top-level keys aren't actually species-related
+    ## Hawever a real species _must_ have a production name
+    my $prod_name = $self->{'conf'}->{'_storage'}{$species}{'SPECIES_PRODUCTION_NAME'};
+    next if (!$prod_name && $species ne 'MULTI');
     
     Bio::EnsEMBL::Registry->add_alias($species, $sp);
 
-    if ($sp ne 'ancestral_sequences' && $self->{'conf'}->{'_storage'}{$species} && $self->{'conf'}->{'_storage'}{$species}{$species}) {
-      my $prod_name = $self->{'conf'}->{'_storage'}{$species}{$species}{'SPECIES_PRODUCTION_NAME'};
-      Bio::EnsEMBL::Registry->add_alias($species, $prod_name);
-    }
+    Bio::EnsEMBL::Registry->add_alias($species, $prod_name) unless $sp eq 'ancestral_sequences';
     
     for my $type (sort { $b =~ /CORE/ <=> $a =~ /CORE/ } keys %{$self->{'conf'}->{'_storage'}{$species}{'databases'}}){
       ## Grab the configuration information from the SpeciesDefs object

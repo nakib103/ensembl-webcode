@@ -355,7 +355,7 @@ sub get_slices {
       slice             => $_,
       underlying_slices => $underlying_slices && $_->can('get_all_underlying_Slices') ? $_->get_all_underlying_Slices : [ $_ ],
       name              => $name,
-      display_name      => $self->get_slice_display_name($self->hub->species_defs->production_name_mapping($name), $_),
+      display_name      => $self->get_slice_display_name($name, $_),
       cigar_line        => $cigar_line,
     };
     if ($name eq 'Ancestral_sequences') {
@@ -419,7 +419,7 @@ sub get_alignments {
   my $as_adaptor              = $compara_db->get_adaptor('AlignSlice');
   my $mlss_adaptor            = $compara_db->get_adaptor('MethodLinkSpeciesSet');
   my $method_link_species_set = $mlss_adaptor->fetch_by_dbID($align);
-  my $align_slice             = $as_adaptor->fetch_by_Slice_MethodLinkSpeciesSet($args->{slice}, $method_link_species_set, 'expanded', 'restrict', $target_slice);
+  my $align_slice             = eval {$as_adaptor->fetch_by_Slice_MethodLinkSpeciesSet($args->{slice}, $method_link_species_set, 'expanded', 'restrict', $target_slice); };
 
   my $species = $args->{species};
   my @selected_species;
@@ -451,9 +451,9 @@ sub get_alignments {
 
   unshift @selected_species, lc $species unless $hub->species_defs->multi_hash->{'DATABASE_COMPARA'}{'ALIGNMENTS'}{$align}{'class'} =~ /pairwise/;
 
-  $align_slice = $align_slice->sub_AlignSlice($args->{start}, $args->{end}) if $args->{start} && $args->{end};
+  $align_slice = $align_slice->sub_AlignSlice($args->{start}, $args->{end}) if $align_slice && $args->{start} && $args->{end};
 
-  return $align_slice->$func(@selected_species);
+  return $align_slice ? $align_slice->$func(@selected_species) : [];
 }
 
 sub get_align_blocks {

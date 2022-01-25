@@ -23,7 +23,7 @@ use strict;
 
 use HTML::Entities qw(encode_entities);
 
-use EnsEMBL::Web::Utils::FormatText qw(glossary_helptip get_glossary_entry);
+use EnsEMBL::Web::Utils::FormatText qw(glossary_helptip get_glossary_entry pluralise);
 
 use base qw(EnsEMBL::Web::Component::Gene);
 
@@ -36,22 +36,6 @@ sub _init {
 ## Stub - implement in plugin if you want to display a summary table
 ## (see public-plugins/ensembl for an example data structure)
 sub _species_sets {}
-
-sub _get_all_analysed_species {
-  my ($self, $cdb) = @_;
-  if (!$self->{'_all_analysed_species'}) {
-    $self->{"_mlss_adaptor_$cdb"} ||= $self->hub->get_adaptor('get_MethodLinkSpeciesSetAdaptor', $cdb);
-    my $pt_mlsss = $self->{"_mlss_adaptor_$cdb"}->fetch_all_by_method_link_type('PROTEIN_TREES');
-    my $best_pt_mlss;
-    if (scalar(@$pt_mlsss) > 1) {
-      ($best_pt_mlss) = grep {$_->species_set->name eq 'collection-default'} @$pt_mlsss;
-    } else {
-      $best_pt_mlss = $pt_mlsss->[0];
-    }
-    $self->{'_all_analysed_species'} = {map {$_->name => 1} @{$best_pt_mlss->species_set->genome_dbs}};
-  }
-  return %{$self->{'_all_analysed_species'}};
-}
 
 our %button_set = ('download' => 1, 'view' => 0);
 
@@ -72,45 +56,62 @@ sub content {
   ); 
 
   my %orthologue_list;
-  my %skipped;
-
-  my %species_to_show = $self->_get_all_analysed_species($cdb);
-  my $this_group      = $species_defs->STRAIN_GROUP;
-
-  ## Skip current species
-  delete $species_to_show{$species_defs->SPECIES_PRODUCTION_NAME};
-
   foreach my $homology_type (@orthologues) {
-    foreach my $species (keys %$homology_type) {
-      
-      my $prod_name     = $species_defs->get_config($species, 'SPECIES_PRODUCTION_NAME');
-      my $strain_group  = $species_defs->get_config($species, 'STRAIN_GROUP');
-
-      ## On a strain-specific page, skip anything that doesn't belong to this group
-      if ($hub->action =~ /^Strain_/) {
-        unless ($strain_group && $strain_group eq $this_group) {
-          delete $species_to_show{$prod_name};
-          next;
-        } 
-      }
-      else {
-        ## Do not show any strain species on main species view
-        if ($strain_group && $strain_group ne $prod_name) {
-          delete $species_to_show{$prod_name};
-          next;
-        }
-      } 
-
+    foreach my $species (sort keys %$homology_type) {
       $orthologue_list{$species} = {%{$orthologue_list{$species}||{}}, %{$homology_type->{$species}}};
-      if($self->param('species_' . lc $species) eq 'off') {
-        $skipped{$species}        += keys %{$homology_type->{$species}};
-      }
-
-      delete $species_to_show{$prod_name};
     }
   }
-
   return '<p>No orthologues have been identified for this gene</p>' unless keys %orthologue_list;
+
+  ## Work out which species we want to skip over, based on page type  and user's configuration
+  my $compara_species   = $species_defs->multi_hash->{'DATABASE_COMPARA'}{'COMPARA_SPECIES'};
+  my $lookup            = $species_defs->prodnames_to_urls_lookup;
+  my $this_group        = $species_defs->STRAIN_GROUP;
+  my $species_not_shown = {}; 
+  my $strains_not_shown = {};
+  my $strain_refs       = {};
+  my $hidden            = {};
+
+  foreach my $prod_name (keys %$compara_species) {
+    ## Use URL as hash key
+    my $species = $lookup->{$prod_name};
+    next if $species eq $hub->species; ## Ignore current species
+    $species = 'Ancestral sequence' unless $species; ## Fake species!
+
+    my $label = $species_defs->species_label($species);
+
+    ## Should we be showing this orthologue on this pagpe by default?
+    my $strain_group  = $species_defs->get_config($species, 'STRAIN_GROUP');
+    if ($hub->action =~ /^Strain_/) {
+      unless ($strain_group && $strain_group eq $this_group) {
+        $species_not_shown->{$species} = $label;
+        next;
+      }
+    }
+    else {
+      if ($strain_group) {
+        if ($strain_group eq $prod_name) {
+          $strain_refs->{$species} = $label;
+        }
+        else { 
+          ## Do not show any strain species on main species view
+          $strains_not_shown->{$species} = $label;
+          next;
+        }
+      }
+    }
+
+    ## Do we even have an orthologue for this species?
+    unless ($orthologue_list{$species}) {
+      $species_not_shown->{$species} = $label;
+      next;
+    }
+  
+    ## Also hide anything turned off in config
+    if ($self->param('species_' . $prod_name) eq 'off') {
+      $hidden->{$label} = scalar keys %{$orthologue_list{$species}||{}};
+    }
+  }
 
   my %orthologue_map = qw(SEED BRH PIP RHS);
   my $alignview      = 0;
@@ -119,7 +120,7 @@ sub content {
 
   ##--------------------------- SUMMARY TABLE ----------------------------------------
 
-  my ($species_sets, $sets_by_species, $set_order) = $self->_species_sets(\%orthologue_list, \%skipped, \%orthologue_map, $cdb);
+  my ($species_sets, $sets_by_species, $set_order) = $self->_species_sets(\%orthologue_list, \%orthologue_map, $cdb);
 
   if ($species_sets) {
     $html .= qq{
@@ -193,8 +194,9 @@ sub content {
   } 
   
   foreach my $species (sort { ($a =~ /^<.*?>(.+)/ ? $1 : $a) cmp ($b =~ /^<.*?>(.+)/ ? $1 : $b) } keys %orthologue_list) {
-    next if $skipped{$species};
     next unless $species;
+    next if $species_not_shown->{$species};
+    next if $strains_not_shown->{$species};
     
     foreach my $stable_id (sort keys %{$orthologue_list{$species}}) {
       my $orthologue = $orthologue_list{$species}{$stable_id};
@@ -316,7 +318,7 @@ sub content {
       });
 
       my $table_details = {
-        'Species'    => join('<br />(', split(/\s*\(/, $species_defs->species_label($species))),
+        'Species'    => join('<br />(', split(/\s*\(/, $species_defs->species_label($spp))),
         'Type'       => $self->html_format ? glossary_helptip($hub, ucfirst $orthologue_desc, ucfirst "$orthologue_desc orthologues").qq{<p class="top-margin"><a href="$tree_url">View Gene Tree</a></p>} : glossary_helptip($hub, ucfirst $orthologue_desc, ucfirst "$orthologue_desc orthologues") ,
         'identifier' => $self->html_format ? $id_info : $stable_id,
         'Target %id' => qq{<span class="$target_class">}.sprintf('%.2f&nbsp;%%', $target).qq{</span>},
@@ -326,7 +328,7 @@ sub content {
         'confidence' => $confidence,
         'options'    => { class => join(' ', @{$sets_by_species->{$species} || []}) }
       };      
-      $table_details->{'Gene name(Xref)'}=$orthologue->{'display_id'} if(!$self->html_format);
+      $table_details->{'Gene name(Xref)'} = $orthologue->{'display_id'} if (!$self->html_format);
 
       push @rows, $table_details;
     }
@@ -340,29 +342,42 @@ sub content {
   
   $html .= '<div class="toggleable selected_orthologues_table">' . $table->render . '</div>';
   
-  if (scalar keys %skipped) {
+  if (scalar keys %$hidden) {
     my $count;
-    $count += $_ for values %skipped;
+    $count += $_ for values %$hidden;
     
     $html .= '<br />' . $self->_info(
       'Orthologues hidden by configuration',
       sprintf(
         '<p>%d orthologues not shown in the table above from the following species. Use the "<strong>Configure this page</strong>" on the left to show them.<ul><li>%s</li></ul></p>',
         $count,
-        join "</li>\n<li>", sort map {$species_defs->species_label($_)." ($skipped{$_})"} keys %skipped
+        join "</li>\n<li>", sort keys %$hidden
       )
     );
   }   
 
-  if (%species_to_show) {
+  if (($hub->action =~ /^Strain_/ && keys %$strains_not_shown)
+    || ($hub->action !~ /^Strain_/ && keys %$species_not_shown)) {
+    my @args;
+    if ($hub->action =~ /^Strain_/) {
+      push @args, scalar(keys %$strains_not_shown), 
+                  $self->object->Obj->stable_id;
+                  $self->get_no_ortho_species_html($strains_not_shown, $sets_by_species),
+                  '';
+    }
+    else {
+      push @args, scalar(keys %$species_not_shown), 
+                  $self->object->Obj->stable_id,
+                  $self->get_no_ortho_species_html($species_not_shown, $sets_by_species),
+                  $self->get_strain_refs_html($strain_refs, $species_not_shown);
+    }
     $html .= '<br /><a name="list_no_ortho"/>' . $self->_info(
       'Species without orthologues',
       sprintf(
-        '<p><span class="no_ortho_count">%d</span> species are not shown in the table above because they don\'t have any orthologue with %s.<ul id="no_ortho_species">%s</ul></p> <input type="hidden" class="panel_type" value="ComparaOrtholog" />',
-        scalar(keys %species_to_show),
-        $self->object->Obj->stable_id,
-        $self->get_no_ortho_species_html(\%species_to_show, $sets_by_species)
-      ),
+        qq(<p><span class="no_ortho_count">%d</span> species are not shown in the table above because they don't have any orthologue with %s.</p>
+<ul id="no_ortho_species">%s</ul>
+%s
+</p> <input type="hidden" class="panel_type" value="ComparaOrtholog" />), @args),
       undef,
       'no_ortho_message_pad'
     );
@@ -373,18 +388,39 @@ sub content {
 
 sub export_options { return {'action' => 'Orthologs'}; }
 
-sub get_no_ortho_species_html {
-  my ($self, $species_to_show, $sets_by_species) = @_;
-  my $hub = $self->hub;
-  my $no_ortho_species_html = '';
+sub get_strain_refs_html {
+  my ($self, $strain_refs, $species_not_shown) = @_;
+  return '' unless keys %{$strain_refs||{}};
 
-  foreach (sort {lc $a cmp lc $b} keys %$species_to_show) {
-    if ($sets_by_species->{$_}) {
-      $no_ortho_species_html .= '<li class="'. join(' ', @{$sets_by_species->{$_}}) .'">'. $hub->species_defs->species_label($_) .'</li>';
-    }
+  my $species_defs = $self->hub->species_defs;
+  my $count = 0;
+  my ($list, %strain_types);
+
+  foreach (sort {lc $strain_refs->{$a} cmp lc $strain_refs->{$b}} keys %$strain_refs) {
+    next if $species_not_shown->{$_}; ## Don't mention if reference has no orthologues
+    $strain_types{$species_defs->get_config($_, 'STRAIN_TYPE')}++;
+    $list .= sprintf '<li>%s</li>', $strain_refs->{$_};
+    $count++;
+  }
+  ## Select the most common strain type for this site
+  my @ordered_types = sort {$strain_types{$b} <=> $strain_types{$a}} keys %strain_types;
+  my $type = $ordered_types[0];
+
+  my $html = sprintf '<p>Additionally, %s of %s species are not shown in this table. %s orthologues can be found on the gene pages of these reference species:</p><ul>%s</ul>', pluralise($type), $count, ucfirst($type), $list;
+  return $html;
+}
+
+sub get_no_ortho_species_html {
+  my ($self, $species_not_shown, $sets_by_species) = @_;
+  my $hub = $self->hub;
+  my $html = '';
+
+  foreach (sort {lc $a cmp lc $b} keys %$species_not_shown) {
+    my $class = $sets_by_species->{$_} ? sprintf(' class="%s"',  join(' ', @{$sets_by_species->{$_}})) : '';
+    $html .= sprintf '<li%s>%s</li>', $class, $species_not_shown->{$_};
   }
 
-  return $no_ortho_species_html;
+  return $html;
 }
 
 sub get_export_data {
@@ -423,7 +459,8 @@ sub get_export_data {
 
     if (keys %ok_species) {
       # It's the lower case species url name which is passed through the data export URL
-      return [grep {$ok_species{lc($hub->species_defs->production_name_mapping($_->get_all_Members->[1]->genome_db->name))}} @$homologies];
+      my $lookup = $hub->species_defs->prodnames_to_urls_lookup;
+      return [grep {$ok_species{lc($lookup->{$_->get_all_Members->[1]->genome_db->name})}} @$homologies];
     }
     else {
       return $homologies;

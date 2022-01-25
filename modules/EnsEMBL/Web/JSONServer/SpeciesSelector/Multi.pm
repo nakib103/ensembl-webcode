@@ -53,43 +53,42 @@ sub json_fetch_species {
   my $species_info    = $hub->get_species_info;
   my (%available_species, %included_regions);
 
+  my $url_lookup = $species_defs->prodnames_to_urls_lookup;
   my $available_species_map = {};
   my $extras = {};
   my $uniq_assembly = {};
-  my $lookup = $species_defs->production_name_lookup;
 
   # Adding haplotypes / patches
   foreach my $alignment (grep $start < $_->{'end'} && $end > $_->{'start'}, @{$intra_species->{$object->seq_region_name}}) {
     my $type = lc $alignment->{'type'};
     my ($s)  = grep /--$alignment->{'target_name'}$/, keys %{$alignment->{'species'}};
     my ($sp, $target) = split '--', $s;
-    my $sp_url = $lookup->{$sp};
-    my $sp_key = $sp_url.'--'.$target;
+    my $url = $url_lookup->{$sp};
 
     # Check for alignment availability in the region
-    next unless $hub->get_adaptor('get_GenomicAlignBlockAdaptor', 'compara')->_has_alignment_for_region($alignment->{id}, $prodname, $chr, $start, $end, $sp, $target);
+    next if !$hub->get_adaptor('get_GenomicAlignBlockAdaptor', 'compara')->_has_alignment_for_region($alignment->{id}, $prodname, $chr, $start, $end, $sp, $target);
 
     s/_/ /g for $type, $target;
 
-    $available_species{$s} = $species_defs->species_label($sp_url, 1) . (grep($target eq $_, @$chromosomes) ? ' chromosome' : '') . " $target - $type";
+    $available_species{$s} = $species_defs->species_label($url, 1) . (grep($target eq $_, @$chromosomes) ? ' chromosome' : '') . " $target - $type";
     my $tmp = {};
-    $tmp->{scientific_name} = $sp_key;
-    $tmp->{key} = $sp_key;
+    $tmp->{scientific_name} = $sp;
+    $tmp->{key} = $sp;
     if (grep($target eq $_, @$chromosomes)) {
       $tmp->{display_name} = 'Chromosome ' . "$target";
       $tmp->{assembly_target} = $target;
       if (!$uniq_assembly->{$target}) {
-        push @{$extras->{$sp_url}->{'primary assembly'}->{data}}, $tmp;
+        push @{$extras->{$url}->{'primary assembly'}->{data}}, $tmp;
         $uniq_assembly->{$target} = 1; # to remove duplicates
       }
-      if (!$extras->{$sp_url}->{'primary assembly'}->{create_folder}) {
-        $extras->{$sp_url}->{'primary assembly'}->{create_folder} = 1;
+      if (!$extras->{$url}->{'primary assembly'}->{create_folder}) {
+        $extras->{$url}->{'primary assembly'}->{create_folder} = 1;
       }
     }
     else {
       $tmp->{display_name} = "$target";
-      $extras->{$sp_url}->{'haplotypes and patches'}->{create_folder} = 1;
-      push @{$extras->{$sp_url}->{'haplotypes and patches'}->{data}}, $tmp;
+      $extras->{$url}->{'haplotypes and patches'}->{create_folder} = 1;
+      push @{$extras->{$url}->{'haplotypes and patches'}->{data}}, $tmp;
     }
   }
 
@@ -99,7 +98,7 @@ sub json_fetch_species {
   }
 
   foreach my $target (keys %included_regions) {
-    my $s     = "$primary_species--$target";
+    my $s     = "$prodname--$target";
     my $label = $species_label . (grep($target eq $_, @$chromosomes) ? ' chromosome' : '');
     
     foreach (grep $_->{'target_name'} eq $chr, @{$included_regions{$target}}) {
@@ -111,8 +110,8 @@ sub json_fetch_species {
 
   foreach my $alignment (grep { $_->{'species'}{$prodname} && $_->{'class'} =~ /pairwise/ } values %$alignments) {
     foreach (keys %{$alignment->{'species'}}) {
-      my $url = $lookup->{$_};
-      if ($url ne $primary_species) {
+      my $url = $url_lookup->{$_};
+      if ($_ ne $prodname) {
         my $type = lc $alignment->{'type'};
            $type =~ s/_net//;
            $type =~ s/_/ /g;
@@ -127,7 +126,7 @@ sub json_fetch_species {
 
   if ($shown{$primary_species}) {
     my ($chr) = split ':', $params->{"r$shown{$primary_species}"};
-    $available_species{$primary_species} = "$species_label - chromosome $chr";
+    $available_species{$prodname} = "$species_label - chromosome $chr";
   }
 
   # create a map of all available species including the haplotypes etc

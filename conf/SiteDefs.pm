@@ -34,9 +34,9 @@ use Sys::Hostname::Long;
 
 ###############################################################################
 ## Ensembl Version and release dates (these get updated every release)
-our $ENSEMBL_VERSION        = 105;            # Ensembl release number
-our $ARCHIVE_VERSION        = 'Dec2021';     # Archive site for this version
-our $ENSEMBL_RELEASE_DATE   = 'Dec 2021'; # As it would appear in the copyright/footer
+our $ENSEMBL_VERSION        = 106;            # Ensembl release number
+our $ARCHIVE_VERSION        = 'Feb2022';     # Archive site for this version
+our $ENSEMBL_RELEASE_DATE   = 'Feb 2022'; # As it would appear in the copyright/footer
 ###############################################################################
 
 
@@ -221,7 +221,6 @@ our $HTSLIB_DIR           = "$ENSEMBL_SERVERROOT/htslib";
 our $BIOPERL_DIR          = "$ENSEMBL_SERVERROOT/bioperl-live";
 our $VCFTOOLS_PERL_LIB    = "$ENSEMBL_SERVERROOT/vcftools/lib/perl5/site_perl";
 our $R2R_BIN              = "$ENSEMBL_SERVERROOT/r2r";
-our $HUBCHECK_BIN         = "$ENSEMBL_SERVERROOT/hubCheck";
 our $ENSEMBL_EMBOSS_PATH  = "$ENSEMBL_SERVERROOT/emboss";
 our $ENSEMBL_WISE2_PATH   = "$ENSEMBL_SERVERROOT/genewise";
 our $GRAPHIC_TTF_PATH     = "/etc/fonts";
