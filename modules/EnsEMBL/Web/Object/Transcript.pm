@@ -293,7 +293,7 @@ sub default_track_by_gene {
    'core' => {
       map( {( $_, $_ )} qw( 
         genscan fgenesh genefinder snap ciona_snap augustus
-        gsc gid slam gws_h gws_s MANE_Select)
+        gsc gid slam gws_h gws_s )
       ),
       map( {($_, $_.'_transcript')} qw(
         vectorbase tigr_0_5 species_protein human_one2one_mus_orth mus_one2one_human_orth
