@@ -461,7 +461,7 @@ sub add_genes {
         ] : [
          'off',          'Off',
          'gene_nolabel', 'No labels',
-
+	 'gene_label', 'With labels'
         ]
       });
       $flag = 1;
