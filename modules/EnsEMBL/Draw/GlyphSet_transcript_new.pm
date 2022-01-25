@@ -28,7 +28,7 @@ use List::Util qw(min max);
 use List::MoreUtils qw(natatime);
 
 use base qw(EnsEMBL::Draw::GlyphSet_transcript_new_base);
-  
+
 #####################################################
 # GLYPHSET API                                      #
 #####################################################
