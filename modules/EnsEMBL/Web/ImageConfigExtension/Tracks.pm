@@ -497,12 +497,12 @@ sub add_genes {
     # Adding MANE Select track
     $self->add_track('transcript', 'mane_select', "MANE Select Transcripts", '_mane_select', {
       labelcaption  => "MANE Select Transcripts",
-      display       => 'off',
+      display       => 'transcript_label',
       db            => "core",
       description   => "The Matched Annotation from NCBI and EMBL-EBI is a collaboration between Ensembl/GENCODE and RefSeq. The MANE Select is a default transcript per human gene that is representative of biology, well-supported, expressed and highly-conserved. This transcript set matches GRCh38 and is 100% identical between RefSeq and Ensembl/GENCODE for 5' UTR, CDS, splicing and 3'UTR.",
       sortable      => 1,
       colours       => $colours,
-      label_key     => '[display_label]',
+      label_key     => '[biotype]',
       logic_names   => ['proj_ensembl',  'proj_ncrna', 'proj_havana_ig_gene', 'havana_ig_gene', 'ensembl_havana_ig_gene', 'proj_ensembl_havana_lincrna', 'proj_havana', 'ensembl', 'mt_genbank_import', 'ensembl_havana_lincrna', 'proj_ensembl_havana_ig_gene', 'ncrna', 'assembly_patch_ensembl', 'ensembl_havana_gene', 'ensembl_lincrna', 'proj_ensembl_havana_gene', 'havana', 'ensembl_havana_transcript'],
       renderers     =>  [
         'off',                     'Off',
@@ -519,7 +519,7 @@ sub add_genes {
       description   => "Transcripts in the MANE Plus Clinical set are additional transcripts per locus necessary to support clinical variant reporting, for example transcripts containing known Pathogenic or Likely Pathogenic clinical variants not reportable using the MANE Select set. Note there may be additional clinically relevant transcripts in the wider RefSeq and Ensembl/GENCODE sets but not yet in MANE.",
       sortable      => 1,
       colours       => $colours,
-      label_key     => '[display_label]',
+      label_key     => '[biotype]',
       logic_names   => ['proj_ensembl',  'proj_ncrna', 'proj_havana_ig_gene', 'havana_ig_gene', 'ensembl_havana_ig_gene', 'proj_ensembl_havana_lincrna', 'proj_havana', 'ensembl', 'mt_genbank_import', 'ensembl_havana_lincrna', 'proj_ensembl_havana_ig_gene', 'ncrna', 'assembly_patch_ensembl', 'ensembl_havana_gene', 'ensembl_lincrna', 'proj_ensembl_havana_gene', 'havana', 'ensembl_havana_transcript'],
       renderers     =>  [
         'off',                     'Off',

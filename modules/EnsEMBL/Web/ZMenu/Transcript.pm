@@ -163,7 +163,7 @@ sub content {
     }
       
     if($mane_plus_clinical){
-      $refseq_id = $mane_select->value;
+      $refseq_id = $mane_plus_clinical->value;
       $self->add_entry({
         type  => ' ',
         label => 'MANE Plus Clinical'
